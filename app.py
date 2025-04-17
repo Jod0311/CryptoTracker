@@ -1,32 +1,44 @@
-import streamlit as st
-import pandas as pd
-import sqlite3
-import matplotlib.pyplot as plt
-from datetime import datetime
-from ml_models.ml_model import train_model
-import numpy as np
+"""Streamlit frontend for the Crypto ML Dashboard."""
+
 import hashlib
+import sqlite3
+from datetime import datetime
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import streamlit as st
+
+from ml_models.ml_model import train_model
+
 
 # ----------------- Auth Helpers ------------------ #
 
 def hash_password(password):
+    """Hash a password using SHA256."""
     return hashlib.sha256(password.encode()).hexdigest()
 
+
 def create_user_table():
+    """Create the users table if it doesn't exist."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS users(username TEXT PRIMARY KEY, password TEXT)')
     conn.commit()
     conn.close()
 
+
 def add_user(username, password):
+    """Add a new user to the database."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
     c.execute('INSERT INTO users(username, password) VALUES (?, ?)', (username, hash_password(password)))
     conn.commit()
     conn.close()
 
+
 def login_user(username, password):
+    """Authenticate a user from the database."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
     c.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, hash_password(password)))
@@ -34,9 +46,11 @@ def login_user(username, password):
     conn.close()
     return data
 
+
 # ----------------- App Core ------------------ #
 
 def fetch_data():
+    """Fetch cryptocurrency data from SQLite database."""
     try:
         conn = sqlite3.connect('data/database.db')
         query = "SELECT * FROM cryptocurrency_data"
@@ -45,15 +59,15 @@ def fetch_data():
 
         df['last_updated'] = pd.to_datetime(df['last_updated'])
         df.set_index('last_updated', inplace=True)
-
         return df
     except Exception as e:
         st.error(f"Failed to fetch data from database: {e}")
         return None
 
-def show_basic_info(df):
-    st.title("Cryptocurrency Dashboard")
 
+def show_basic_info(df):
+    """Display current info and charts for each cryptocurrency."""
+    st.title("Cryptocurrency Dashboard")
     unique_coins_df = df.drop_duplicates(subset=['symbol'])
 
     for _, row in unique_coins_df.iterrows():
@@ -95,9 +109,10 @@ def show_basic_info(df):
 
         st.markdown("---")
 
-def cumulative_graph(df):
-    st.title("Cumulative Cryptocurrency Price Chart")
 
+def cumulative_graph(df):
+    """Display cumulative chart of all crypto prices over time."""
+    st.title("Cumulative Cryptocurrency Price Chart")
     cumulative_df = df.groupby(['last_updated', 'name'])['current_price'].mean().unstack()
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -110,7 +125,9 @@ def cumulative_graph(df):
     ax.legend(title="Cryptocurrencies")
     st.pyplot(fig)
 
+
 def login_register():
+    """Login and registration component."""
     create_user_table()
     st.sidebar.subheader("User Login / Registration")
     option = st.sidebar.radio("Action", ["Login", "Register"])
@@ -143,7 +160,9 @@ def login_register():
             st.session_state.clear()
             st.experimental_rerun()
 
+
 def main():
+    """Main entry point of the Streamlit app."""
     login_register()
 
     if "logged_in" in st.session_state and st.session_state["logged_in"]:
@@ -155,6 +174,7 @@ def main():
             st.error("No data available.")
     else:
         st.warning("Please log in to view the dashboard.")
+
 
 if __name__ == "__main__":
     main()

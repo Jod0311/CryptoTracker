@@ -1,44 +1,38 @@
-"""Streamlit frontend for the Crypto ML Dashboard."""
-
 import hashlib
 import sqlite3
 from datetime import datetime
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
-
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
 from ml_models.ml_model import train_model
 
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ----------------- Auth Helpers ------------------ #
 
 def hash_password(password):
-    """Hash a password using SHA256."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-
 def create_user_table():
-    """Create the users table if it doesn't exist."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS users(username TEXT PRIMARY KEY, password TEXT)')
     conn.commit()
     conn.close()
 
-
 def add_user(username, password):
-    """Add a new user to the database."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
     c.execute('INSERT INTO users(username, password) VALUES (?, ?)', (username, hash_password(password)))
     conn.commit()
     conn.close()
 
-
 def login_user(username, password):
-    """Authenticate a user from the database."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
     c.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, hash_password(password)))
@@ -46,11 +40,9 @@ def login_user(username, password):
     conn.close()
     return data
 
-
-# ----------------- App Core ------------------ #
+# ----------------- Core Logic ------------------ #
 
 def fetch_data():
-    """Fetch cryptocurrency data from SQLite database."""
     try:
         conn = sqlite3.connect('data/database.db')
         query = "SELECT * FROM cryptocurrency_data"
@@ -64,11 +56,11 @@ def fetch_data():
         st.error(f"Failed to fetch data from database: {e}")
         return None
 
-
 def show_basic_info(df):
-    """Display current info and charts for each cryptocurrency."""
     st.title("Cryptocurrency Dashboard")
     unique_coins_df = df.drop_duplicates(subset=['symbol'])
+
+    suggestions = []
 
     for _, row in unique_coins_df.iterrows():
         with st.container():
@@ -90,6 +82,7 @@ def show_basic_info(df):
                     future_time = [[latest_time + 3600]]
                     predicted_price = model.predict(future_time)[0]
                     st.markdown(f"Predicted Price (1h later): ${predicted_price:.2f}")
+                    suggestions.append((row['name'], predicted_price))
 
             with col2:
                 st.subheader("Historical Price Chart")
@@ -109,9 +102,27 @@ def show_basic_info(df):
 
         st.markdown("---")
 
+    show_gemini_suggestions(suggestions)
+
+def show_gemini_suggestions(suggestions):
+    if suggestions:
+        suggestions.sort(key=lambda x: x[1], reverse=True)
+        top_3 = suggestions[:3]
+        coin_list = [f"{coin} (Predicted: ${pred:.2f})" for coin, pred in top_3]
+        prompt = (
+            "Based on the predicted prices below, which cryptocurrency should a user consider buying?\n"
+            + "\n".join(coin_list)
+        )
+
+        st.subheader("Gemini Crypto Suggestions")
+        if st.button("Get AI Suggestions"):
+            try:
+                response = genai.GenerativeModel("gemini-2.0-flash").generate_content(contents=[{"parts":[{"text": prompt}]}])
+                st.info(response.parts[0].text)
+            except Exception as e:
+                st.error(f"Error fetching AI suggestions: {e}")
 
 def cumulative_graph(df):
-    """Display cumulative chart of all crypto prices over time."""
     st.title("Cumulative Cryptocurrency Price Chart")
     cumulative_df = df.groupby(['last_updated', 'name'])['current_price'].mean().unstack()
 
@@ -125,9 +136,7 @@ def cumulative_graph(df):
     ax.legend(title="Cryptocurrencies")
     st.pyplot(fig)
 
-
 def login_register():
-    """Login and registration component."""
     create_user_table()
     st.sidebar.subheader("User Login / Registration")
     option = st.sidebar.radio("Action", ["Login", "Register"])
@@ -160,9 +169,7 @@ def login_register():
             st.session_state.clear()
             st.experimental_rerun()
 
-
 def main():
-    """Main entry point of the Streamlit app."""
     login_register()
 
     if "logged_in" in st.session_state and st.session_state["logged_in"]:
@@ -174,7 +181,6 @@ def main():
             st.error("No data available.")
     else:
         st.warning("Please log in to view the dashboard.")
-
 
 if __name__ == "__main__":
     main()

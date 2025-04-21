@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cryptotracker-deployment
+  labels:
+    app: cryptotracker
+spec:
+  replicas: 3  # Increased replicas for high availability
+  selector:
+    matchLabels:
+      app: cryptotracker
+  template:
+    metadata:
+      labels:
+        app: cryptotracker
+    spec:
+      containers:
+      - name: cryptotracker-container
+        image: achyuthak2004/cryptotrackerapp:latest  # Corrected with your Docker Hub username and image name
+        ports:
+        - containerPort: 8501
+        resources:  # Added resource requests and limits for better resource management
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: data-volume
+          mountPath: /app/data  # Match your app's expected path
+      volumes:
+      - name: data-volume
+        emptyDir: {}  # Consider using PersistentVolumeClaim for production
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cryptotracker-service
+spec:
+  type: NodePort  # Consider using LoadBalancer for cloud environments
+  selector:
+    app: cryptotracker
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8501
+      nodePort: 30001  # Ensure this port is not conflicting with others

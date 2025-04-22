@@ -1,24 +1,25 @@
+"""Streamlit Cryptocurrency Tracker App with ML & Gemini AI Suggestions."""
+
+import os
 import hashlib
 import sqlite3
-from datetime import datetime
+
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import streamlit as st
-import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 from ml_models.ml_model import train_model
-#test
+
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# ----------------- Auth Helpers ------------------ #
-
 def hash_password(password):
+    """Hash a password using SHA-256."""
     return hashlib.sha256(password.encode()).hexdigest()
 
 def create_user_table():
+    """Create the user table in SQLite if not exists."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS users(username TEXT PRIMARY KEY, password TEXT)')
@@ -26,46 +27,47 @@ def create_user_table():
     conn.close()
 
 def add_user(username, password):
+    """Add a new user with hashed password."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
-    c.execute('INSERT INTO users(username, password) VALUES (?, ?)', (username, hash_password(password)))
+    c.execute('INSERT INTO users(username, password) VALUES (?, ?)',
+              (username, hash_password(password)))
     conn.commit()
     conn.close()
 
 def login_user(username, password):
+    """Authenticate a user."""
     conn = sqlite3.connect('data/users.db')
     c = conn.cursor()
-    c.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, hash_password(password)))
+    c.execute('SELECT * FROM users WHERE username = ? AND password = ?',
+              (username, hash_password(password)))
     data = c.fetchone()
     conn.close()
     return data
 
-# ----------------- Core Logic ------------------ #
-
 def fetch_data():
+    """Fetch cryptocurrency data from SQLite DB."""
     try:
         conn = sqlite3.connect('data/database.db')
         query = "SELECT * FROM cryptocurrency_data"
         df = pd.read_sql(query, conn)
         conn.close()
-
         df['last_updated'] = pd.to_datetime(df['last_updated'])
         df.set_index('last_updated', inplace=True)
         return df
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         st.error(f"Failed to fetch data from database: {e}")
         return None
 
 def show_basic_info(df):
+    """Display key information and trends for each cryptocurrency."""
     st.title("Cryptocurrency Dashboard")
     unique_coins_df = df.drop_duplicates(subset=['symbol'])
-
     suggestions = []
 
     for _, row in unique_coins_df.iterrows():
         with st.container():
             col1, col2 = st.columns([1, 2])
-
             with col1:
                 st.image(row['image'], width=64)
                 st.header(f"{row['name']} ({row['symbol'].upper()})")
@@ -88,10 +90,12 @@ def show_basic_info(df):
                 st.subheader("Historical Price Chart")
                 fig, ax = plt.subplots(figsize=(6, 4))
                 coin_df = df[df['symbol'] == row['symbol']]
-                ax.plot(coin_df.index, coin_df['current_price'], label="Price", color="green")
+                ax.plot(coin_df.index, coin_df['current_price'],
+                        label="Price", color="green")
                 ax.axhline(row['high_24h'], color="red", linestyle="--", label="High (24H)")
                 ax.axhline(row['low_24h'], color="blue", linestyle="--", label="Low (24H)")
-                ax.axhline(row['current_price'], color="yellow", linestyle="--", label="Current Price")
+                ax.axhline(row['current_price'], color="yellow", linestyle="--",
+                           label="Current Price")
                 max_price = max(coin_df['current_price'].max(), row['high_24h'])
                 ax.set_ylim(0, max_price * 1.1)
                 ax.set_xlabel("Time")
@@ -105,6 +109,7 @@ def show_basic_info(df):
     show_gemini_suggestions(suggestions)
 
 def show_gemini_suggestions(suggestions):
+    """Display AI-generated investment suggestions from Gemini."""
     if suggestions:
         suggestions.sort(key=lambda x: x[1], reverse=True)
         top_3 = suggestions[:3]
@@ -113,23 +118,22 @@ def show_gemini_suggestions(suggestions):
             "Based on the predicted prices below, which cryptocurrency should a user consider buying?\n"
             + "\n".join(coin_list)
         )
-
         st.subheader("Gemini Crypto Suggestions")
         if st.button("Get AI Suggestions"):
             try:
-                response = genai.GenerativeModel("gemini-2.0-flash").generate_content(contents=[{"parts":[{"text": prompt}]}])
+                response = genai.GenerativeModel("gemini-2.0-flash").generate_content(
+                    contents=[{"parts": [{"text": prompt}]}])
                 st.info(response.parts[0].text)
             except Exception as e:
                 st.error(f"Error fetching AI suggestions: {e}")
 
 def cumulative_graph(df):
+    """Plot cumulative price trends of all cryptocurrencies."""
     st.title("Cumulative Cryptocurrency Price Chart")
     cumulative_df = df.groupby(['last_updated', 'name'])['current_price'].mean().unstack()
-
     fig, ax = plt.subplots(figsize=(10, 6))
     for coin in cumulative_df.columns:
         ax.plot(cumulative_df.index, cumulative_df[coin], label=coin)
-
     ax.set_title("Cumulative Cryptocurrency Price Trends")
     ax.set_xlabel("Time")
     ax.set_ylabel("Price (USD)")
@@ -137,6 +141,7 @@ def cumulative_graph(df):
     st.pyplot(fig)
 
 def login_register():
+    """Handle login and registration via sidebar."""
     create_user_table()
     st.sidebar.subheader("User Login / Registration")
     option = st.sidebar.radio("Action", ["Login", "Register"])
@@ -167,12 +172,12 @@ def login_register():
         st.sidebar.success(f"Logged in as {st.session_state['username']}")
         if st.sidebar.button("Logout"):
             st.session_state.clear()
-            st.experimental_rerun()
+            st.rerun()
 
 def main():
+    """Main function to launch the Streamlit dashboard."""
     login_register()
-
-    if "logged_in" in st.session_state and st.session_state["logged_in"]:
+    if st.session_state.get("logged_in"):
         df = fetch_data()
         if df is not None and not df.empty:
             show_basic_info(df)

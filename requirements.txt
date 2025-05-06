@@ -2,3 +2,11 @@ streamlit
 pandas
 matplotlib
 scikit-learn
+tensorflow
+numpy
+cython
+scipy
+qiskit==1.4.2
+qiskit-machine-learning==0.7.0
+qiskit-aer
+dotenv

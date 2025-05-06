@@ -10,6 +10,9 @@ import streamlit as st
 from dotenv import load_dotenv
 import google.generativeai as genai
 from ml_models.ml_model import train_model
+from dl_models.lstm_model import train_lstm_model
+from qnn_models.qnn_model import train_qnn_model
+
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -60,8 +63,8 @@ def fetch_data():
         st.error(f"Failed to fetch data from database: {e}")
         return None
 
+
 def show_basic_info(df):
-    """Display key information and trends for each cryptocurrency."""
     st.title("Cryptocurrency Dashboard")
     unique_coins_df = df.drop_duplicates(subset=['symbol'])
     suggestions = []
@@ -80,23 +83,40 @@ def show_basic_info(df):
                 st.markdown(f"High (24H): ${row['high_24h']:.2f}")
                 st.markdown(f"Low (24H): ${row['low_24h']:.2f}")
 
+                coin_df = df[df['symbol'] == row['symbol']].copy()
+
+                # **ML Prediction**
                 model, latest_time = train_model(df, row['symbol'])
                 if model:
-                    future_time = [[latest_time + 3600]]
-                    predicted_price = model.predict(future_time)[0]
-                    st.markdown(f"Predicted Price (1h later): ${predicted_price:.2f}")
-                    suggestions.append((row['name'], predicted_price))
+                    future_time = [[latest_time + 3600]]  # 1 hour later
+                    ml_predicted_price = model.predict(future_time)[0]
+                    st.markdown(f"🔍 **ML Predicted Price (1h later):** ${ml_predicted_price:.2f}")
+                    suggestions.append((row['name'], ml_predicted_price))
+
+                # **LSTM Prediction**
+                with st.spinner("Training LSTM..."):
+                    lstm_pred, error = train_lstm_model(df.reset_index(), row['symbol'])
+                if error:
+                    st.markdown("🤖 **DL (LSTM) Prediction:** Not available")
+                else:
+                    st.markdown(f"🤖 **DL (LSTM) Predicted Price:** ${lstm_pred:.2f}")
+
+                # **QNN Prediction**
+                with st.spinner("Training QNN..."):
+                    qnn_pred, qnn_error = train_qnn_model(df, row['symbol'])
+                if qnn_error:
+                    st.markdown(f"🔮 **QNN Prediction:** {qnn_error}")
+                else:
+                    st.markdown(f"🔮 **QNN Predicted Price (1h later):** ${qnn_pred:.2f}")
+                    suggestions.append((row['name'], qnn_pred))
 
             with col2:
                 st.subheader("Historical Price Chart")
                 fig, ax = plt.subplots(figsize=(6, 4))
-                coin_df = df[df['symbol'] == row['symbol']]
-                ax.plot(coin_df.index, coin_df['current_price'],
-                        label="Price", color="green")
+                ax.plot(coin_df.index, coin_df['current_price'], label="Price", color="green")
                 ax.axhline(row['high_24h'], color="red", linestyle="--", label="High (24H)")
                 ax.axhline(row['low_24h'], color="blue", linestyle="--", label="Low (24H)")
-                ax.axhline(row['current_price'], color="yellow", linestyle="--",
-                           label="Current Price")
+                ax.axhline(row['current_price'], color="yellow", linestyle="--", label="Current Price")
                 max_price = max(coin_df['current_price'].max(), row['high_24h'])
                 ax.set_ylim(0, max_price * 1.1)
                 ax.set_xlabel("Time")
@@ -190,4 +210,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-#xyz
+#hello

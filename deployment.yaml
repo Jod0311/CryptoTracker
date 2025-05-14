@@ -21,11 +21,11 @@ spec:
         - containerPort: 8501
         resources:  # Added resource requests and limits for better resource management
           requests:
-            memory: "128Mi"
-            cpu: "250m"
-          limits:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
         volumeMounts:
         - name: data-volume
           mountPath: /app/data  # Match your app's expected path
